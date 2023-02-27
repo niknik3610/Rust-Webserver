@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 use socket2::{Socket, Domain, Type};
+use std::mem::MaybeUninit;
 
 fn main() {
     let socket: Socket = Socket::new(Domain::IPV6, Type::STREAM, None).unwrap();
@@ -10,13 +11,18 @@ fn main() {
     socket.bind(&send_address.into()).unwrap();
     socket.connect(&server_address.into()).unwrap();
 
-    let sent_request_result: Result<String, String>;
-    sent_request_result = request_file(&socket, "index.html");
-    match sent_request_result{
+    match request_file(&socket, "/index.html"){
+        Ok(_e) => {},
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    }
+
+    match receive_file(&socket) {
         Ok(e) => println!("{e}"),
         Err(e) => println!("{e}")
     }
-    
 }
 
 fn request_file(socket: &Socket, path: &str) -> Result<String, String> { 
@@ -27,9 +33,30 @@ fn request_file(socket: &Socket, path: &str) -> Result<String, String> {
     }
 }
 
+fn receive_file(socket: &Socket) -> Result<String, String> {  
+    let mut buffer = [MaybeUninit::<u8>::uninit(); 512];  
+ 
+    match socket.recv(&mut buffer){
+        Ok(a) => {
+            if a < 1 {
+                return Err("Buffer is 0".to_string());
+            };
+        }, 
+        Err(_e) => {
+            return Err("Error Receving files".to_string());
+        }
+    }
+    
+    let mut buffer_translated : String = "".to_string();
+    for i in buffer {
+        unsafe {buffer_translated.push(i.assume_init() as char)}
+    }
+    return Ok(buffer_translated);
+
+}
 
 fn create_request_header(path: String) -> String { 
-        return "GET".to_owned() + &path + "HTTP/1.1 \r\n
+        return "GET ".to_owned() + &path + " HTTP/1.1 \r\n
         Host: developer.mozilla.org \r\n
         User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:50.0) Gecko/20100101 Firefox/50.0 \r\n
         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8 \r\n
