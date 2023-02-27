@@ -1,17 +1,21 @@
 use std::net::SocketAddr;
-use socket2::{Socket, Domain, Type, Protocol};
+use socket2::{Socket, Domain, Type};
 
 fn main() {
     let socket: Socket = Socket::new(Domain::IPV6, Type::STREAM, None).unwrap();
-    socket.set_only_v6(false).unwrap()l
-    let send_address: SocketAddr = "[::1]8001".parse().unwrap();
-    let server_address: SocketAddr = "[::1]8000".parse().unwrap();
+    socket.set_only_v6(false).unwrap();
+    let send_address: SocketAddr = "[::1]:8001".parse().unwrap();
+    let server_address: SocketAddr = "[::1]:8000".parse().unwrap();
     
     socket.bind(&send_address.into()).unwrap();
     socket.connect(&server_address.into()).unwrap();
 
-    let mut sent_request_result: Result<String, String>;
-
+    let sent_request_result: Result<String, String>;
+    sent_request_result = request_file(&socket, "index.html");
+    match sent_request_result{
+        Ok(e) => println!("{e}"),
+        Err(e) => println!("{e}")
+    }
     
 }
 
