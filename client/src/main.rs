@@ -2,26 +2,27 @@ use std::net::SocketAddr;
 use socket2::{Socket, Domain, Type};
 use std::mem::MaybeUninit;
 
-fn main() {
-    let socket: Socket = Socket::new(Domain::IPV6, Type::STREAM, None).unwrap();
-    socket.set_only_v6(false).unwrap();
+fn main() { 
     let send_address: SocketAddr = "[::1]:8001".parse().unwrap();
     let server_address: SocketAddr = "[::1]:8000".parse().unwrap();
     
-    socket.bind(&send_address.into()).unwrap();
-    socket.connect(&server_address.into()).unwrap();
-
-    match request_file(&socket, "/index.html"){
-        Ok(_e) => {},
-        Err(e) => {
-            println!("{e}");
-            return;
+    for n in 0..100 {
+        let socket: Socket = Socket::new(Domain::IPV6, Type::STREAM, None).unwrap();
+        socket.set_only_v6(false).unwrap();
+    
+        socket.connect(&server_address.into()).unwrap();
+    
+        match request_file(&socket, "/index.html"){
+            Ok(_e) => {},
+            Err(e) => {
+                println!("{e}");
+                return;
+            }
         }
-    }
-
-    match receive_file(&socket) {
-        Ok(e) => println!("{e}"),
-        Err(e) => println!("{e}")
+        match receive_file(&socket) {
+            Ok(e) => println!("{e}"),
+            Err(e) => println!("{e}")
+        }
     }
 }
 

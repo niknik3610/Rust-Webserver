@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::io::{Read, stdout, Write};
 use std::net::SocketAddr;
+use std::thread;
+use std::time::Duration;
 use socket2::   {Socket, Domain, Type};
 use std::mem::MaybeUninit;
 use std::str::{self};
@@ -11,40 +13,47 @@ fn main() {
     socket.set_only_v6(false).unwrap();
     let recv_address : SocketAddr = "[::1]:8000".parse().unwrap();
     socket.bind(&recv_address.into()).unwrap();
-    
-    let mut received_request_result: Result<String, String>;
-    let mut sent_request_result: Result<bool, String>;
-    
+
     loop {
+        socket.listen(128).unwrap();
         let mut clone_socket = socket.try_clone().unwrap();
-        clone_socket.listen(128).unwrap();
-        
         let open_request = clone_socket.accept();
+
         match open_request {
             Ok((sock, _addr)) => {
-                clone_socket = sock;
-                received_request_result = receive_request(&clone_socket);
+                clone_socket = sock; 
+                thread::spawn(move || {
+                    connection_handler(clone_socket);   
+                    println!("Thread now sleeping");
+                    thread::sleep(Duration::new(1, 0));
+                });
             }, 
             Err(e) => {
                 println!("35: {e}");
-                continue;
+                return;
             }
         }
-
-        match received_request_result {
-            Ok(path) => sent_request_result = reply_request(&clone_socket, &path),
-            Err(e) => {
-                println!("43: {e}");
-                continue;
-            }
-        }
-        
-        match sent_request_result {
-            Ok(_e) => println!("Packet Sent"),
-            Err(e) => println!("50: {e}")
-        }
-        stdout().flush().unwrap();
     }
+}
+
+fn connection_handler(socket: Socket) {  
+    let received_request_result: Result<String, String>;
+    let sent_request_result: Result<bool, String>;
+    
+    received_request_result = receive_request(&socket);
+    match received_request_result {
+        Ok(path) => sent_request_result = reply_request(&socket, &path),
+        Err(e) => {
+            println!("43: {e}");
+            return;
+        }
+    }
+
+    match sent_request_result {
+        Ok(_e) => println!("Packet Sent"),
+        Err(e) => println!("50: {e}")
+    }
+    stdout().flush().unwrap();
 }
 
 fn receive_request(socket: &Socket) -> Result<String, String>{
