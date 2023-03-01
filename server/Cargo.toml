@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 socket2 = "0.4.7"
+ctrlc = "3.2.5"

@@ -1,39 +1,73 @@
+use std::alloc::System;
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{Read, stdout, Write};
 use std::net::SocketAddr;
-use std::thread;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::sync::{atomic::AtomicBool, Arc};
+use std::thread::{self, JoinHandle};
 use socket2::   {Socket, Domain, Type};
 use std::mem::MaybeUninit;
 use std::str::{self};
 use std::path::Path;
 
 fn main() {
-    let socket = Socket::new(Domain::IPV6, Type::STREAM, None).unwrap();
+    let mut handles = vec![];
+
+    //sets up sig-int interrupt  
+    let quit = Arc::new(Mutex::new(false)); 
+    let quit_clone = Arc::clone(&quit);
+
+    match ctrlc::set_handler(move || {
+        println!("Quitting after finishing request");
+        let mut quit = quit_clone.lock().unwrap(); 
+        *quit = true;
+        return; 
+    }) {
+            Ok(_e) => {},
+            Err(e) => {
+                println!("{e}");
+                return;
+            }
+    };
+    
+    let socket = Socket::new(Domain::IPV6, Type::STREAM, None).unwrap();  
     socket.set_only_v6(false).unwrap();
     let recv_address : SocketAddr = "[::1]:8000".parse().unwrap();
     socket.bind(&recv_address.into()).unwrap();
-
+    
     loop {
         socket.listen(128).unwrap();
+
         let mut clone_socket = socket.try_clone().unwrap();
         let open_request = clone_socket.accept();
 
         match open_request {
             Ok((sock, _addr)) => {
                 clone_socket = sock; 
-                thread::spawn(move || {
+                let handle = thread::spawn(move || {
                     connection_handler(clone_socket);   
-                    println!("Thread now sleeping");
-                    thread::sleep(Duration::new(1, 0));
                 });
+                handles.push(handle);
             }, 
             Err(e) => {
-                println!("35: {e}");
-                return;
+                println!("{e}");
+                break;
             }
         }
+ 
+        let quit_clone = Arc::clone(&quit);
+        let quit = quit_clone.lock().unwrap();
+        
+        if *quit == true {
+            println!("quitting");
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            return;
+        }
     }
+    
 }
 
 fn connection_handler(socket: Socket) {  
@@ -54,6 +88,7 @@ fn connection_handler(socket: Socket) {
         Err(e) => println!("50: {e}")
     }
     stdout().flush().unwrap();
+    
 }
 
 fn receive_request(socket: &Socket) -> Result<String, String>{
