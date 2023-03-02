@@ -1,11 +1,8 @@
-use std::alloc::System;
-use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{Read, stdout, Write};
 use std::net::SocketAddr;
-use std::sync::Mutex;
 use std::sync::{atomic::AtomicBool, Arc};
-use std::thread::{self, JoinHandle};
+use std::thread::{self};
 use socket2::   {Socket, Domain, Type};
 use std::mem::MaybeUninit;
 use std::str::{self};
@@ -15,18 +12,17 @@ fn main() {
     let mut handles = vec![];
 
     //sets up sig-int interrupt  
-    let quit = Arc::new(Mutex::new(false)); 
+    let quit = Arc::new(AtomicBool::new(false)); 
     let quit_clone = Arc::clone(&quit);
 
     match ctrlc::set_handler(move || {
         println!("Quitting after finishing request");
-        let mut quit = quit_clone.lock().unwrap(); 
-        *quit = true;
+        quit_clone.store(true, std::sync::atomic::Ordering::Relaxed); 
         return; 
     }) {
             Ok(_e) => {},
-            Err(e) => {
-                println!("{e}");
+            Err(_e) => {
+                println!("Unable to Quit");
                 return;
             }
     };
@@ -37,6 +33,7 @@ fn main() {
     socket.bind(&recv_address.into()).unwrap();
     
     loop {
+        let quit_clone = Arc::clone(&quit);
         socket.listen(128).unwrap();
 
         let mut clone_socket = socket.try_clone().unwrap();
@@ -55,19 +52,15 @@ fn main() {
                 break;
             }
         }
- 
-        let quit_clone = Arc::clone(&quit);
-        let quit = quit_clone.lock().unwrap();
-        
-        if *quit == true {
+    
+        if quit_clone.load(std::sync::atomic::Ordering::Relaxed) {
             println!("quitting");
             for handle in handles {
                 handle.join().unwrap();
             }
-            return;
-        }
+            break;
+        };
     }
-    
 }
 
 fn connection_handler(socket: Socket) {  
